@@ -1,0 +1,26 @@
+{
+  "name": "service-worker-webpack-plugin",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qzruncode/service-worker-webpack-plugin.git"
+  },
+  "keywords": [
+    "webpack",
+    "ServiceWorker"
+  ],
+  "author": "qzruncode",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/qzruncode/service-worker-webpack-plugin/issues"
+  },
+  "homepage": "https://github.com/qzruncode/service-worker-webpack-plugin#readme",
+  "dependencies": {
+    "fs-extra": "^10.0.0"
+  }
+}
