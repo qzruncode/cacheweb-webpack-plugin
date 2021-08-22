@@ -1,4 +1,4 @@
-[![NPM version](https://img.shields.io/npm/v/react-vitual-keyboard.svg)](https://www.npmjs.com/package/webcache-webpack-plugin)
+[![NPM version](https://img.shields.io/npm/v/webcache-webpack-plugin.svg)](https://www.npmjs.com/package/webcache-webpack-plugin)
 [![NPM package](https://img.shields.io/npm/dy/webcache-webpack-plugin.svg)](https://www.npmjs.com/package/webcache-webpack-plugin)
 
 ## webcache-webpack-plugin
