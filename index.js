@@ -2,7 +2,7 @@ const fs = require('fs-extra');
 const path = require('path');
 
 let fileList = [];
-class SwCheckListPlugin {
+class ServiceWorkerWebpackPlugin {
   chacheName=process.cwd().split(path.sep).slice(-1);
   swFile='';
   noCacheFileList=[
@@ -50,4 +50,4 @@ class SwCheckListPlugin {
     })
   }
 }
-module.exports = SwCheckListPlugin;
+module.exports = ServiceWorkerWebpackPlugin;
