@@ -17,7 +17,7 @@ npm install webcache-webpack-plugin
 ### 使用
 ```js
 // 在webpack的plugins配置项中添加
-new SwCheckListPlugin({
+new WebcacheWebpackPlugin({
   chacheName: 'v', // 当需要重置缓存，修改此版本号即可，不推荐频繁更新
   noCacheFileList: [ // 不需要缓存文件请求资源
     'index.html',
