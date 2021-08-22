@@ -1,5 +1,5 @@
 {
-  "name": "service-worker-webpack-plugin",
+  "name": "webcache-webpack-plugin",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/qzruncode/service-worker-webpack-plugin.git"
+    "url": "git+https://github.com/qzruncode/webcache-webpack-plugin.git"
   },
   "keywords": [
     "webpack",
@@ -17,9 +17,9 @@
   "author": "qzruncode",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/qzruncode/service-worker-webpack-plugin/issues"
+    "url": "https://github.com/qzruncode/webcache-webpack-plugin/issues"
   },
-  "homepage": "https://github.com/qzruncode/service-worker-webpack-plugin#readme",
+  "homepage": "https://github.com/qzruncode/webcache-webpack-plugin#readme",
   "dependencies": {
     "fs-extra": "^10.0.0"
   }
