@@ -2,7 +2,7 @@ const fs = require('fs-extra');
 const path = require('path');
 
 let fileList = [];
-class WebcacheWebpackPlugin {
+class CacheWebWebpackPlugin {
   chacheName=process.cwd().split(path.sep).slice(-1);
   swFile='';
   noCacheFileList=[
@@ -50,4 +50,4 @@ class WebcacheWebpackPlugin {
     })
   }
 }
-module.exports = WebcacheWebpackPlugin;
+module.exports = CacheWebWebpackPlugin;

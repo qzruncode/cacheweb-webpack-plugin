@@ -1,7 +1,7 @@
-[![NPM version](https://img.shields.io/npm/v/webcache-webpack-plugin.svg)](https://www.npmjs.com/package/webcache-webpack-plugin)
-[![NPM package](https://img.shields.io/npm/dy/webcache-webpack-plugin.svg)](https://www.npmjs.com/package/webcache-webpack-plugin)
+[![NPM version](https://img.shields.io/npm/v/cacheweb-webpack-plugin.svg)](https://www.npmjs.com/package/cacheweb-webpack-plugin)
+[![NPM package](https://img.shields.io/npm/dy/cacheweb-webpack-plugin.svg)](https://www.npmjs.com/package/cacheweb-webpack-plugin)
 
-## webcache-webpack-plugin
+## cacheweb-webpack-plugin
 
 自动生成sw文件，对前端的api请求和文件请求做缓存，大幅优化前端页面响应速度
 
@@ -11,7 +11,7 @@
 
 ### 安装
 ```
-npm install webcache-webpack-plugin
+npm install cacheweb-webpack-plugin
 ```
 
 ### 使用
@@ -71,4 +71,4 @@ window.onload = () => {
 ```
 
 ### 开发
-> 源码在 [webcache-webpack-plugin](https://github.com/qzruncode/webcache-webpack-plugin)
+> 源码在 [cacheweb-webpack-plugin](https://github.com/qzruncode/cacheweb-webpack-plugin)
