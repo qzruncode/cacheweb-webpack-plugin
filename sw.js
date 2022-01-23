@@ -1,5 +1,8 @@
 const chacheName = __chacheName__; // 更新缓存只需要修改 chacheName 版本号即可
+const dynamicChacheName = __chacheName__ + '_dynamic'
 const dbName = chacheName+'SW';
+const maxNum = Number(__maxNum__);
+const expirationHour = Number(__expirationHour__);
 const checkList = __CheckList__;
 const noCacheFileList = __noCacheFileList__; // 不需要缓存的文件资源
 const noCacheApiList = __noCacheApiList__ // 无需缓存的动态资源
@@ -70,10 +73,10 @@ function storeCheckList(list) {
       const objectStore = transaction.objectStore('checkList');
       const cr = objectStore.openCursor(null, 'next');
 
-      // 0 表示新增
+      // 0 表示不变
       // -1 表示删除
-      // 1 表示不变
-      const itemKeyMap = list.reduce((pre, cur) => {pre[cur] = 0; return pre;}, {});
+      // 1 表示新增
+      const itemKeyMap = list.reduce((pre, cur) => {pre[cur] = 1; return pre;}, {});
       
       let preCursor = { value: { id: -1 } };
       cr.onsuccess = function(e) {
@@ -85,8 +88,8 @@ function storeCheckList(list) {
               objectStore.delete(cursor.value.id); // 从数据库中删除
               break;
             }
-            case 0: { // 数据库中的url，在最新版本的list中
-              itemKeyMap[cursor.value.value] = 1; // 标记为 不变
+            case 1: { // 数据库中的url，在最新版本的list中
+              itemKeyMap[cursor.value.value] = 0; // 标记为 不变
             }
             default: {
               break;
@@ -94,11 +97,11 @@ function storeCheckList(list) {
           }
           preCursor = cursor;
           cursor.continue();
-        }else {
+        } else {
           // 更新数据库中的数据
           for(const key in itemKeyMap) {
             const value = itemKeyMap[key];
-            if(value == 0) {
+            if(value == 1) {
               objectStore.put({value: key, id: ++preCursor.value.id})
             }
           }
@@ -110,23 +113,25 @@ function storeCheckList(list) {
     dbr.onupgradeneeded = function(e) {
       console.log('db更新了')
       const db = e.target.result; // 获取IDBDatabase
-      db.createObjectStore( "checkList", { keyPath: "id" });
+      db.createObjectStore("checkList", { keyPath: "id" });
     };
   })
 }
 
 self.addEventListener('install',e => {
+  console.log(1);
   self.skipWaiting();
   e.waitUntil(
     (async () => {
+      console.log(4);
       // 这个地方只会对也只需要对 文件类型的资源做预缓存
-      console.log('正在安装')
       const cache = await caches.open(chacheName);
       const itemKeyMap = await storeCheckList(checkList);
+      console.log(44, itemKeyMap);
       for(const key in itemKeyMap) {
         const value = itemKeyMap[key];
         if(!noCacheFileList.includes(key)) {
-          if(value == 0) { // 新增的资源
+          if(value == 1) { // 新增的资源
             await cache.add(key);
           }else if(value == -1){ // 要删除的资源
             await cache.delete(key);
@@ -138,9 +143,10 @@ self.addEventListener('install',e => {
 });
 
 self.addEventListener('activate', e => { // 注册新的sw时候调用，这里一般清除老sw的缓存
+  console.log(2);
   self.clients.claim();
   e.waitUntil((async () => {
-    console.log('正在激活');
+    console.log(5);
     const keyList = await caches.keys();
     await Promise.all(keyList.map(key => {
       if (key !== chacheName) {
@@ -152,43 +158,87 @@ self.addEventListener('activate', e => { // 注册新的sw时候调用，这里�
   })());
 });
 
+
+// 缓存策略
+async function handleNoCache(list, req) {
+  // 不需要缓存的资源，直接从服务端取
+  if(
+    list.findIndex(item => {
+      const pathname = (new URL(req.url).pathname);
+      if(pathname == '/') return true;
+      return pathname.slice(1) == item;
+    }) != -1
+  ) {
+    const response = await makeFetch(req);
+    return response;
+  }
+}
+
+async function handleCacheFirst(list, req) {
+  // 应用缓存优先策略的动态资源 从缓存中取，有的话直接返回
+  if(
+    list.findIndex(item => {
+      const pathname = (new URL(req.url).pathname);
+      return pathname.slice(1) == item;
+    }) != -1
+  ) {
+    const cachedState = await caches.match(req); // 缓存中有数据
+    if (cachedState) { 
+      return cachedState;
+    }
+  }
+}
+
+async function handleNetworkFirst(req) {
+  // 缓存中没有数据，从服务器请求后存入缓存中
+  const defaultRes = await makeFetch(req);
+  if (defaultRes.ok) {
+    await LRU_F(req, defaultRes.clone());
+  }
+  return defaultRes;
+}
+
+async function LRU_F(req, res) {
+  const cache = await caches.open(dynamicChacheName);
+  const keys = await cache.keys();
+  if(keys.length > maxNum) {
+    // 超出cache缓存数量
+    // 1. 首先移除超出有效期的缓存
+    keys.forEach(function(request) {
+      const response = cache.match(request);
+      if (response.headers.has('date')) {
+        const dateHeader = response.headers.get('date');
+        const parsedDate = new Date(dateHeader);
+        const headerTime = parsedDate.getTime();
+        if (!isNaN(headerTime)) {
+          const now = Date.now();
+          const expirationSeconds = expirationHour * 60 * 60;
+          if(headerTime >= now - (expirationSeconds * 1000)) {
+            // 资源过期了;
+            console.log('过期了', request)
+          }
+        }
+      }
+      // cache.delete(request);
+    });
+    // 2. 其次
+  } else {
+    cache.put(req, res);
+  }
+}
+
 self.addEventListener('fetch', e => {
+  console.log(3);
   e.respondWith((async () => {
+    console.log(6);
     // 新的sw文件过来后，这个函数执行，内部访问的还是之前旧版的sw
     // 缓存列表必须从服务端实时fetch过来，要不然用的还是上个版本sw的列表
 
-    // 不需要缓存的资源，直接从服务端取
-    if(
-      noCacheList.findIndex(item => {
-        const pathname = (new URL(e.request.url).pathname);
-        if(pathname == '/') return true;
-        return pathname.slice(1) == item
-      }) != -1
-    ) { // 无需缓存的请求
-      const response = await makeFetch(e.request);
-      return response;
-    }
-    
-    // 应用缓存优先策略的动态资源 从缓存中取，有的话直接返回
-    if(
-      cacheFirstList.findIndex(item => {
-        const pathname = (new URL(e.request.url).pathname);
-        return pathname.slice(1) == item;
-      }) != -1
-    ) {
-      const cachedState = await caches.match(e.request); // 缓存中有数据
-      if (cachedState) { 
-        return cachedState;
-      }
-    }
-
-    const response = await makeFetch(e.request);; // 缓存中没有数据，从服务器请求后存入缓存中
-
-    const cache = await caches.open(chacheName);
-    if (response.ok) {
-      cache.put(e.request, response.clone());
-    }
-
-    return response;
+    const nocacheRes = await handleNoCache(noCacheList, e.request);
+    if(nocacheRes != undefined) return nocacheRes;
+    const cacheFirstRes = await handleCacheFirst(cacheFirstList.concat(checkList), e.request);
+    if(cacheFirstRes != undefined) return cacheFirstRes;
+    const networkFirstRes = await handleNetworkFirst(e.request);
+    return networkFirstRes;
   })());
 });
