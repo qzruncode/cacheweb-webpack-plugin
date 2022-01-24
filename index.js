@@ -4,7 +4,7 @@ const path = require('path');
 let fileList = [];
 class CacheWebWebpackPlugin {
   chacheName=process.cwd().split(path.sep).slice(-1);
-  expirationHour=72;
+  expirationHour=5;
   maxNum=100;
   swFile='';
   noCacheFileList=[
@@ -17,7 +17,7 @@ class CacheWebWebpackPlugin {
   constructor(options={}) {
     options.chacheName && (this.chacheName = options.chacheName);
     options.expirationHour && (this.expirationHour = options.expirationHour);
-    options.maxNum && (this.maxNum = options.maxNum);
+    !isNaN(options.maxNum) && (this.maxNum = options.maxNum);
     options.noCacheFileList && this.noCacheFileList.push(...options.noCacheFileList);
     options.noCacheApiList && this.noCacheApiList.push(...options.noCacheApiList);
     options.cacheFirstList && this.cacheFirstList.push(...options.cacheFirstList);
