@@ -11,16 +11,16 @@ class CacheWebWebpackPlugin {
     '/', // 首页不能缓存，缓存后其他文件更新，刷新页面不会有效果
     'sw.js',
   ];
-  noCacheApiList=[];
   cacheFirstList=[];
+  permanentCacheList=[];
 
   constructor(options={}) {
     options.chacheName && (this.chacheName = options.chacheName);
     options.expirationHour && (this.expirationHour = options.expirationHour);
     !isNaN(options.maxNum) && (this.maxNum = options.maxNum);
     options.noCacheFileList && this.noCacheFileList.push(...options.noCacheFileList);
-    options.noCacheApiList && this.noCacheApiList.push(...options.noCacheApiList);
     options.cacheFirstList && this.cacheFirstList.push(...options.cacheFirstList);
+    options.permanentCacheList && this.permanentCacheList.push(...options.permanentCacheList);
     fs.readFile(path.resolve(__dirname, './sw.js'), 'utf8', (err, data) => {
       this.swFile = data;
     })
@@ -47,8 +47,8 @@ class CacheWebWebpackPlugin {
         .replaceAll('__maxNum__', `"${this.maxNum}"`)
         .replaceAll('__CheckList__', JSON.stringify(fileList))
         .replaceAll('__noCacheFileList__', JSON.stringify(this.noCacheFileList))
-        .replaceAll('__noCacheApiList__', JSON.stringify(this.noCacheApiList))
         .replaceAll('__cacheFirstList__', JSON.stringify(this.cacheFirstList))
+        .replaceAll('__permanentCacheList__', JSON.stringify(this.permanentCacheList))
       return fs.outputFile(baseURL + '/sw.js', fileContent).catch(err => {
         console.error(err)
       })

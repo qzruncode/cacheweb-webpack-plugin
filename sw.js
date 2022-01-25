@@ -1,13 +1,13 @@
 const chacheName = __chacheName__; // 更新缓存只需要修改 chacheName 版本号即可
 const dynamicChacheName = __chacheName__ + "_dynamic";
+const permanentCacheName = __chacheName__ + "_permanent";
 const dbName = chacheName + "SW";
 const maxNum = Number(__maxNum__);
 const expirationHour = Number(__expirationHour__);
 const checkList = __CheckList__;
-const noCacheFileList = __noCacheFileList__; // 不需要缓存的文件资源
-const noCacheApiList = __noCacheApiList__; // 无需缓存的动态资源
-const noCacheList = [...noCacheFileList, ...noCacheApiList];
+const noCacheFileList = __noCacheFileList__; // 通过webpack编译后的文件，某些文件用户不希望缓存
 const cacheFirstList = __cacheFirstList__; // 缓存优先的动态资源
+const permanentCacheList = __permanentCacheList__; // 哪些资源需要运用永久缓存，用户未指定的所有请求都不需要缓存
 
 // checklist.json 文件类型的资源，大型项目体积巨大，存在 indexDB 中，检索速度快。文件名称改变，diff两个checklist的区别，修改cache中的内容，增量修改
 // 只要我们的代码改变，我们生成的checkList就会改变，浏览器识别到sw文件内容发生更改后，会在浏览器空闲的时候去安装sw
@@ -47,10 +47,6 @@ function reportError(type, msg) {
       client.postMessage(m);
     });
   });
-}
-
-function refreshClient() {
-  reportError("RefreshClient", null);
 }
 
 async function makeFetch(req) {
@@ -161,13 +157,17 @@ self.addEventListener("activate", (e) => {
       const keyList = await caches.keys();
       await Promise.all(
         keyList.map((key) => {
-          if (key !== chacheName) {
+          const exist =
+            [chacheName, dynamicChacheName, permanentCacheName].findIndex(
+              (name) => name === key
+            ) === -1;
+          if (exist) {
             caches.delete(key);
             indexedDB.deleteDatabase(key + "SW");
           }
         })
       );
-      refreshClient();
+      reportError("RefreshClient", null);
     })()
   );
 });
@@ -176,18 +176,22 @@ function isReqInList(req, list) {
   return (
     list.findIndex((item) => {
       const pathname = new URL(req.url).pathname;
-      if (pathname == "/") return true;
       return pathname.slice(1) == item;
     }) != -1
   );
 }
 
-// 无缓存策略
-async function handleNoCache(list, req) {
-  // 不需要缓存的资源，直接从服务端取
+async function handlePermanentCache(list, req) {
   if (isReqInList(req, list)) {
-    const response = await makeFetch(req);
-    return response;
+    const cachedState = await caches.match(req);
+    if (cachedState) {
+      return cachedState;
+    } else {
+      const response = await makeFetch(req);
+      const cache = await caches.open(permanentCacheName);
+      await cache.put(req, response.clone());
+      return response;
+    }
   }
 }
 
@@ -231,7 +235,6 @@ async function handleCacheFirst(list, req) {
 async function LRU_F(req, res) {
   const cache = await caches.open(dynamicChacheName);
   const keys = await cache.keys();
-  console.log("rad", keys);
 
   if (keys.length > maxNum) {
     // 超出cache缓存数量
@@ -260,8 +263,19 @@ async function LRU_F(req, res) {
       // 缓存中并没有资源过期，cache新缓存的资源都是从尾部存入，越先存入的资源，在cache中越靠前的位置，移除的时候将最靠前的删除
       // 如果一个请求在 某个时间间隔内，被高频访问，其命中数会急速上升，则认为此缓存的命中率极高，当过了此时间间隔后，长时间未访问，其会排在cache中最靠前的位置
       // 在删除最靠前的元素之前，需要和next元素做命中数对比，谁小删谁。当出现极端情况，缓存全是短时间爆拉的高命中数缓存后续长时间未访问，由于只和next元素比较，所以最多只会存在一个高命中数死缓存，保证了不会占据新缓存的位置
-      
+
       // 实现步骤1：对比cache开头的两个缓存的 hits，谁大删除谁
+      const lastRes = await cache.match(keys[0]);
+      const nextLastRes = await cache.match(keys[1]);
+      if (lastRes && nextLastRes) {
+        const lastResHits = Number(lastRes.headers.get("hits"));
+        const nextLastResHits = Number(nextLastRes.headers.get("hits"));
+        if (lastResHits <= nextLastResHits) {
+          cache.delete(keys[0]);
+        } else {
+          cache.delete(keys[1]);
+        }
+      }
     }
   }
 
@@ -279,7 +293,8 @@ async function LRU_F(req, res) {
   await cache.put(req, copyRes);
 }
 
-async function handleNetworkFirst(req) {
+// 无缓存策略
+async function handleNoCache(req) {
   // 缓存中没有数据，从服务器请求后存入缓存中
   const defaultRes = await makeFetch(req);
   return defaultRes;
@@ -293,15 +308,22 @@ self.addEventListener("fetch", (e) => {
       // 新的sw文件过来后，这个函数执行，内部访问的还是之前旧版的sw
       // 缓存列表必须从服务端实时fetch过来，要不然用的还是上个版本sw的列表
 
-      const nocacheRes = await handleNoCache(noCacheList, e.request);
-      if (nocacheRes != undefined) return nocacheRes;
-      const cacheFirstRes = await handleCacheFirst(
-        [cacheFirstList, checkList],
-        e.request
-      );
-      if (cacheFirstRes != undefined) return cacheFirstRes;
-      const networkFirstRes = await handleNetworkFirst(e.request);
-      return networkFirstRes;
+      if (!isReqInList(e.request, noCacheFileList)) {
+        const permanentCacheRes = await handlePermanentCache(
+          permanentCacheList,
+          e.request
+        );
+        if (permanentCacheRes != undefined) return permanentCacheRes;
+
+        const cacheFirstRes = await handleCacheFirst(
+          [cacheFirstList, checkList],
+          e.request
+        );
+        if (cacheFirstRes != undefined) return cacheFirstRes;
+      }
+
+      const noCacheRes = await handleNoCache(e.request);
+      return noCacheRes;
     })()
   );
 });
