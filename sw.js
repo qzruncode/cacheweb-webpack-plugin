@@ -188,8 +188,10 @@ async function handlePermanentCache(list, req) {
       return cachedState;
     } else {
       const response = await makeFetch(req);
-      const cache = await caches.open(permanentCacheName);
-      await cache.put(req, response.clone());
+      if (response && response.ok) { 
+        const cache = await caches.open(permanentCacheName);
+        await cache.put(req, response.clone());
+      }
       return response;
     }
   }
@@ -223,7 +225,7 @@ async function handleCacheFirst(list, req) {
       // 缓存中没有数据，需要从后台获取，之后运用 LRU_F 做缓存替换
       // 走入这一步的都是 cacheFirstList 中的请求
       const tmpRes = await makeFetch(req);
-      if (tmpRes.ok) {
+      if (tmpRes && tmpRes.ok) {
         const res = tmpRes.clone();
         await LRU_F(req, res);
       }
