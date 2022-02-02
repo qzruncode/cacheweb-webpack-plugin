@@ -3,38 +3,46 @@
 
 ## cacheweb-webpack-plugin
 
-自动生成sw文件，对前端的api请求和文件请求做缓存，大幅优化前端页面响应速度
+1. 自动生成sw文件，对前端文件资源和请求做缓存，大幅优化前端页面响应速度
+2. 借鉴LRU和LFU算法，设计并实现LRU-FT算法，能够高效处理缓存溢出
+3. 在更新预缓存列表时，采用高效的diff对比并且利用indexedDB存储数据
+4. 最好和[sww-cli](https://www.npmjs.com/package/sww-cli)配套使用，此webpack构建工具是在开发测试cacheweb-webpack-plugin时配套开发的，能够将前端的文件打包成合适的大小更加便于缓存更新，并且能够用于大型的前端程序开发，省去频繁配置。
+5. 将前端的请求归类为需要永久缓存的请求、需要缓存优先的请求和不需要缓存的请求。
+6. 此插件为本人在编写硕士毕业论文时设计的一款缓存插件，欢迎大家指出缺点和建议。以下将sw的设计流程图分享出来。
 
-## 设计思路
-
-<img width="200" src="http://qzruncode.github.io/image/sw.jpg" alt="keyboard" >
+<img width="1200" src="http://qzruncode.github.io/image/sw-code.png" alt="keyboard" >
 
 ### 安装
 ```
 npm install cacheweb-webpack-plugin
 ```
 
-### 使用
+### 在webpack中使用
 ```js
 // 在webpack的plugins配置项中添加
-new WebcacheWebpackPlugin({
-  chacheName: 'v', // 当需要重置缓存，修改此版本号即可，不推荐频繁更新
-  noCacheFileList: [ // 不需要缓存文件请求资源
-    'index.html',
-    'sw/register.js'
-  ],
-  noCacheApiList: [ // 不需要缓存的api请求资源
-    'test'
-  ],
-  cacheFirstList: [ // 应用缓存优先的资源
-    'cacheFirstTest'
-  ]
+new cachewebWebpackPlugin({
+  // chacheName: 缓存的名称，当需要彻底刷新缓存的时候，将此字段修改成其他字段即可
+  chacheName: 'SW',
+  // expirationHour: 存入缓存的有效期，只对 cacheFirstList 中指定的url请求有效 
+  expirationHour: 72, 
+  // maxNum: 动态缓存可容纳的最大数量
+  maxNum: 50, 
+  // noCacheFileList: 默认情况下，经过webpack打包后的文件资源会全部进入缓存，这里可以指定部分不需要进入缓存的文件url
+  noCacheFileList: ['index.html', 'register.js'], 
+  // cacheFirstList: 指定需要动态缓存的url，也就是说部分请求返回的数据更新不是特别频繁，需要短暂的缓存可以在这里指定
+  cacheFirstList: ['cacheFirstTest', 'acacheFirstTes', 'bcacheFirstTes'],
+  // permanentCacheList: 指定需要永久缓存的资源
+  permanentCacheList: ['test'],
 })
+```
 
+### 注册
+```js
 // 在前端项目中新建一个sw目录，创建register.js
 window.onload = () => {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register('sw.js', {
+    // register方法：页面刷新就会执行，但是 sw 里面的代码只有 sw文件发生改变才会执行
+    navigator.serviceWorker.register('sw.js', { 
       scope: './'
     }).then(registration => {
       let serviceWorker;
@@ -52,7 +60,7 @@ window.onload = () => {
       }
     });
     navigator.serviceWorker.onmessage = (e) => {
-      console.log(1111, e);
+      // cachewebWebpackPlugin 插件在捕获到错误后，在这里可以做异常处理
       const { data } = e;
       if(data.type === 'FetchError') {
         // 请求失败;
@@ -67,7 +75,6 @@ window.onload = () => {
     console.log('sw不支持');
   }
 };
-
 ```
 
 ### 开发
