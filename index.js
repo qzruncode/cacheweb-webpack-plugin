@@ -46,13 +46,13 @@ class CacheWebWebpackPlugin {
     compiler.hooks.done.tapPromise(this.constructor.name, ({compilation}) => {
       const baseURL = compilation.compiler.options.output.path;
       const fileContent = this.swFile
-        .replaceAll('__chacheName__', `"${this.chacheName}_cache"`)
-        .replaceAll('__expirationHour__', `"${this.expirationHour}"`)
-        .replaceAll('__maxNum__', `"${this.maxNum}"`)
-        .replaceAll('__CheckList__', JSON.stringify(fileList))
-        .replaceAll('__noCacheFileList__', JSON.stringify(this.noCacheFileList))
-        .replaceAll('__cacheFirstList__', JSON.stringify(this.cacheFirstList))
-        .replaceAll('__permanentCacheList__', JSON.stringify(this.permanentCacheList))
+        .replace(/__chacheName__/g, `"${this.chacheName}_cache"`)
+        .replace(/__expirationHour__/g, `"${this.expirationHour}"`)
+        .replace(/__maxNum__/g, `"${this.maxNum}"`)
+        .replace(/__CheckList__/g, JSON.stringify(fileList))
+        .replace(/__noCacheFileList__/g, JSON.stringify(this.noCacheFileList))
+        .replace(/__cacheFirstList__/g, JSON.stringify(this.cacheFirstList))
+        .replace(/__permanentCacheList__/g, JSON.stringify(this.permanentCacheList))
       return fs.outputFile(baseURL + '/sw.js', fileContent).catch(err => {
         console.error(err)
       })
