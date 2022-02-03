@@ -3,24 +3,28 @@ const path = require('path');
 
 let fileList = [];
 class CacheWebWebpackPlugin {
-  chacheName=process.cwd().split(path.sep).slice(-1);
-  expirationHour=5;
-  maxNum=100;
-  swFile='';
-  noCacheFileList=[
-    '/', // 首页不能缓存，缓存后其他文件更新，刷新页面不会有效果
-    'sw.js',
-  ];
-  cacheFirstList=[];
-  permanentCacheList=[];
-
   constructor(options={}) {
+    // 初始化
+    this.chacheName = process.cwd().split(path.sep).slice(-1);
+    this.expirationHour = 5;
+    this.maxNum = 100;
+    this.swFile = '';
+    this.noCacheFileList=[
+      '/', // 首页不能缓存，缓存后其他文件更新，刷新页面不会有效果
+      'sw.js',
+    ];
+    this.cacheFirstList = [];
+    this.permanentCacheList = [];
+
+    // 设置用户参数
     options.chacheName && (this.chacheName = options.chacheName);
     options.expirationHour && (this.expirationHour = options.expirationHour);
     !isNaN(options.maxNum) && (this.maxNum = options.maxNum);
     options.noCacheFileList && this.noCacheFileList.push(...options.noCacheFileList);
     options.cacheFirstList && this.cacheFirstList.push(...options.cacheFirstList);
     options.permanentCacheList && this.permanentCacheList.push(...options.permanentCacheList);
+    
+    // 读取sw文件字符串
     fs.readFile(path.resolve(__dirname, './sw.js'), 'utf8', (err, data) => {
       this.swFile = data;
     })
