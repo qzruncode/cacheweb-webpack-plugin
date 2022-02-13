@@ -150,7 +150,7 @@ function isReqInList(req, list) {
   return (
     list.findIndex((item) => {
       const pathname = new URL(req.url).pathname;
-      return pathname.slice(1) == item;
+      return decodeURIComponent(pathname.slice(1)) == item;
     }) != -1
   );
 }
