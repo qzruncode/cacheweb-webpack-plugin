@@ -1,4 +1,3 @@
-
 // 只要sw中的代码发生了任何字节级别的变化，浏览器会自动启动 字节比较，如果发生了变化会立即出发sw的注册流程
 const chacheName = __chacheName__; // 更新缓存只需要修改 chacheName 版本号即可
 const dynamicChacheName = __chacheName__ + "_dynamic";
@@ -162,7 +161,7 @@ async function handlePermanentCache(list, req) {
       return cachedState;
     } else {
       const response = await makeFetch(req);
-      if (response && response.ok) { 
+      if (response && response.ok) {
         const cache = await caches.open(permanentCacheName);
         await cache.put(req, response.clone());
       }
@@ -196,77 +195,90 @@ async function handleCacheFirst(list, req) {
       }
       return cachedState;
     } else {
-      // 缓存中没有数据，需要从后台获取，之后运用 LRU_F 做缓存替换
+      // 缓存中没有数据，需要从后台获取，之后运用 LRU_FT 做缓存替换
       // 走入这一步的都是 cacheFirstList 中的请求
       const tmpRes = await makeFetch(req);
       if (tmpRes && tmpRes.ok) {
         const res = tmpRes.clone();
-        await LRU_F(req, res);
+        await LRU_FT(req, res);
       }
       return tmpRes;
     }
   }
 }
 
-async function LRU_F(req, res) {
+async function LRU_FT(req, res) {
   const cache = await caches.open(dynamicChacheName);
   const keys = await cache.keys();
 
-  if (keys.length > maxNum) {
-    // 超出cache缓存数量
-    // 1. 首先移除超出有效期的缓存
-    let flag = false; // 缓存中是否已经移除了部分缓存
-    keys.forEach(async function (request) {
-      const response = await cache.match(request);
-      if (response.headers.has("sw-date")) {
-        const dateHeader = response.headers.get("sw-date");
-        const parsedDate = new Date(Number(dateHeader));
-        const headerTime = parsedDate.getTime();
-        if (!isNaN(headerTime)) {
-          const now = Date.now();
-          const expirationSeconds = expirationHour * 60 * 60;
-          if (headerTime < now - expirationSeconds * 1000) {
-            // 资源过期了，将过期资源删除
-            console.log("过期了", request);
-            cache.delete(request);
-            flag = true; // 缓存资源已经被移除，有足够的空间存入新缓存
+  const saveReq = async () => {
+    // 保存资源，未超出cache缓存数量，在header中保存字段，直接存入
+    const headers = new Headers(res.headers);
+    headers.append("sw-date", new Date().getTime());
+    headers.append("hits", 1); // 新的资源进入缓存，将命中数设置为1
+    const blob = await res.blob();
+    const copyRes = new Response(blob, {
+      status: res.status,
+      statusText: res.statusText,
+      headers: headers,
+    });
+    await cache.put(req, copyRes);
+  }
+  if (keys.length >= maxNum) {
+    // 超出cache缓存数量，首先移除超出有效期的缓存
+    let flag = false; // 记录缓存中是否已经移除了部分缓存
+    const requests = []
+    keys.forEach(request => {requests.push(cache.match(request))})
+    Promise.allSettled(requests).then(responses => {
+      responses.forEach(response => {
+        if (response.status === 'fulfilled' && response.value.headers.has("sw-date")) {
+          const dateHeader = response.value.headers.get("sw-date");
+          const parsedDate = new Date(Number(dateHeader));
+          const headerTime = parsedDate.getTime();
+          if (!isNaN(headerTime)) {
+            const now = Date.now();
+            const expirationSeconds = expirationHour * 60 * 60;
+            if (headerTime < now - expirationSeconds * 1000) {
+              // 资源过期了，将过期资源删除
+              console.log("过期了", request);
+              cache.delete(request);
+              flag = true; // 缓存资源已经被移除，有足够的空间存入新缓存
+            }
           }
         }
-      }
-    });
+      })
 
-    if (!flag) {
-      // 缓存中并没有资源过期，cache新缓存的资源都是从尾部存入，越先存入的资源，在cache中越靠前的位置，移除的时候将最靠前的删除
-      // 如果一个请求在 某个时间间隔内，被高频访问，其命中数会急速上升，则认为此缓存的命中率极高，当过了此时间间隔后，长时间未访问，其会排在cache中最靠前的位置
-      // 在删除最靠前的元素之前，需要和next元素做命中数对比，谁小删谁。当出现极端情况，缓存全是短时间爆拉的高命中数缓存后续长时间未访问，由于只和next元素比较，所以最多只会存在一个高命中数死缓存，保证了不会占据新缓存的位置
-
-      // 实现步骤1：对比cache开头的两个缓存的 hits，谁大删除谁
-      const lastRes = await cache.match(keys[0]);
-      const nextLastRes = await cache.match(keys[1]);
-      if (lastRes && nextLastRes) {
-        const lastResHits = Number(lastRes.headers.get("hits"));
-        const nextLastResHits = Number(nextLastRes.headers.get("hits"));
-        if (lastResHits <= nextLastResHits) {
-          cache.delete(keys[0]);
-        } else {
-          cache.delete(keys[1]);
+      if (!flag) {
+        // 执行到这一步说明缓存中并没有资源过期，cache新缓存的资源都是从尾部存入，越先存入的资源，在cache中越靠前的位置，移除的时候将最靠前的删除
+        // 采用打分机制，分数上限为maxScore，资源的分数由 其在cache中的位置+命中数 构成，优先删除分数最低的资源，当分数一样时，优先删除cache中位置最靠前的
+        const maxScore = maxNum;
+        // 找到分数最小的缓存
+        const minimumScoreResponse = responses.reduce((preReponse, curReponse, index) => {
+          if (preReponse.status === 'fulfilled' && curReponse.status === 'fulfilled') {
+            const preReponseHits = Number(preReponse.value.headers.get("hits"));
+            const curReponseHits = Number(curReponse.value.headers.get("hits"));
+            let preReponseScore = preReponseHits + (index - 1);
+            preReponseScore = preReponseScore > maxScore ? maxScore : preReponseScore;
+            let curReponseScore = curReponseHits + index;
+            curReponseScore = curReponseScore > maxScore ? maxScore : curReponseScore;
+            if(preReponseScore > curReponseScore) {
+              return curReponse;
+            } else {
+              return preReponse;
+            }
+          }
+        });
+        if(minimumScoreResponse) {
+          console.log('minimumScoreResponse', minimumScoreResponse);
+          const minimumScoreIndex = responses.findIndex(item => item === minimumScoreResponse);
+          cache.delete(keys[minimumScoreIndex]);
         }
       }
-    }
+      saveReq();
+    })
+  } else {
+    saveReq();
   }
-
-  // 保存资源
-  // 未超出cache缓存数量，在header中保存字段，直接存入
-  const headers = new Headers(res.headers);
-  headers.append("sw-date", new Date().getTime());
-  headers.append("hits", 1); // 新的资源进入缓存，将命中数设置为1
-  const blob = await res.blob();
-  const copyRes = new Response(blob, {
-    status: res.status,
-    statusText: res.statusText,
-    headers: headers,
-  });
-  await cache.put(req, copyRes);
 }
 
 // 无缓存策略
